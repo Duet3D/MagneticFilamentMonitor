@@ -34,7 +34,7 @@ extern void sei();
 
 #include "AS5601.h"
 
-constexpr uint8_t FirmwareVersion = 2;
+constexpr uint8_t FirmwareVersion = 3;
 
 #define DOUBLE_SPEED	(0)									// set nonzero for 2000bps, zero for 1000bps
 
@@ -42,26 +42,7 @@ constexpr uint8_t FirmwareVersion = 2;
 
 const uint32_t F_CPU = 8000000UL;
 
-#if defined(__AVR_ATtiny45__)
-
-// Pin allocations on the original ATTINY45 implementation
-#define PIN_SWITCH	PINB
-const unsigned int PinSwitchBitNum = 3;						// optional filament present switch with external pullup resistor
-
-#define PORT_LED	PORTB
-#define DDR_LED		DDRB
-const unsigned int PortLedRedBitNum = 1;					// same as the OUT port
-const unsigned int PortLedGreenBitNum = 4;
-
-#define PORT_OUT	PORTB
-const unsigned int PortOutBitNum = 1;
-
-const uint8_t PortBPullupBitMask = 0;						// no unused pins
-const uint8_t PortBOutputMask = BITVAL(PortLedRedBitNum) | BITVAL(PortLedGreenBitNum);	// enable LED pins as outputs
-
-#elif defined(__AVR_ATtiny44A__)
-
-// Pin allocations on the newer ATTINY44A implementation
+// Pin allocations on the ATTINY44A implementation
 #define PIN_SWITCH	PINA
 const unsigned int PinSwitchBitNum = 2;						// optional filament present switch with external pullup resistor
 
@@ -82,8 +63,6 @@ const uint8_t PortBPullupBitMask = BITVAL(PinProgBitNum);	// need to enable pull
 const uint8_t PortAOutputMask = BITVAL(PortOutBitNum);
 const uint8_t PortBOutputMask = BITVAL(PortLedRedBitNum) | BITVAL(PortLedGreenBitNum);	// enable LED pins as outputs
 
-#endif
-
 const uint8_t LedRed = BITVAL(PortLedRedBitNum);
 const uint8_t LedGreen = BITVAL(PortLedGreenBitNum);
 
@@ -96,10 +75,13 @@ const uint16_t TicksPerSecond = 1000;						// this must be the same as the desir
 // Error codes (expressed as number of blinks
 const uint8_t FLASHES_OK = 3;
 const uint8_t FLASHES_ERR_I2C = 4;
-const uint8_t FLASHES_ERR_STATE = 5;
-const uint8_t FLASHES_ERR_NOMAG	= 6;
+const uint8_t FLASHES_ERR_I2C_STATE = 5;
+const uint8_t FLASHES_ERR_NOMAG = 6;
+const uint8_t FLASHES_ERR_TOO_WEAK = 7;
+const uint8_t FLASHES_ERR_TOO_STRONG = 8;
 
-const uint16_t AS5601Config = 0x130C;						// 0001 0011 0000 1100
+const uint16_t AS5601Config = ConfFTH_18LSB | ConfSF_2X | ConfHYST_LSB3 | ConfPM_NOM;
+
 const unsigned int BitsToDiscard = 2;						// discard the two LSB of the angle
 
 #if DOUBLE_SPEED
@@ -121,6 +103,13 @@ const uint16_t kickIntervalTicks = TicksPerSecond/kickFrequency;
 //  Data word:			P00S 10pp pppppppp		S = switch open, ppppppppppp = 10-bit filament position
 //  Error word:			P010 0000 0000eeee		eeee = error code
 //	Version word:		P110 0000 vvvvvvvv		vvvvvvvv = sensor/firmware version, at least 2
+//
+// Version 3 firmware:
+//  Data word:			P00S 10pp pppppppp		S = switch open, ppppppppppp = 10-bit filament position
+//  Error word:			P010 0000 0000eeee		eeee = error code
+//	Version word:		P110 0000 vvvvvvvv		vvvvvvvv = sensor/firmware version, at least 2
+//  Magnitude word		P110 0010 mmmmmmmm		mmmmmmmm = highest 8 bits of magnitude (cf. brightness of laser sensor)
+//  AGC word			P110 0011 aaaaaaaa		aaaaaaaa = AGC setting (cf. shutter of laser sensor)
 
 const uint16_t ParityBit = 0x8000u;							// adjusted so that there is an even number of bits
 const uint16_t SwitchOpenBit = 0x1000u;
@@ -128,6 +117,8 @@ const uint16_t SwitchOpenBit = 0x1000u;
 const uint16_t PositionBits = 0x0800u;						// set in words carrying position data
 const uint16_t ErrorBits = 0x2000u;							// set if the sensor failed to initialize or self-test
 const uint16_t VersionBits = 0x6000u;						// set in words containing version information
+const uint16_t MagnitudeBits = 0x6200u;						// set in words containing magnitude information
+const uint16_t AgcBits = 0x6300u;							// set in words containing AGC information
 
 const uint16_t ErrorBlinkTicks = TicksPerSecond/4;			// fast error blinks
 const uint16_t OkBlinkTicks = TicksPerSecond/2;				// slow OK blinks
@@ -190,13 +181,19 @@ void ReportError(uint8_t errorNum)
 	blink(errorNum, LedRed, ErrorBlinkTicks, ErrorBlinkTicks);	// short error blinks, also leaves the output in the low state for ErrorBlinkTicks
 }
 
+uint8_t StatusToErrorCode(uint8_t status)
+{
+	return  ((status & StatusMH) != 0) ? FLASHES_ERR_TOO_STRONG
+			: ((status & StatusMD) == 0) ? FLASHES_ERR_NOMAG
+				: ((status & StatusML) != 0) ? FLASHES_ERR_TOO_WEAK
+					: FLASHES_OK;
+}
+
 int main(void)
 {  
 	// Set up the I/O ports
-#if defined(__AVR_ATtiny44A__)
 	PORTA = PortAPullupBitMask;
 	DDRA = PortAOutputMask;
-#endif
 	PORTB = PortBPullupBitMask;
 	DDRB = PortBOutputMask;
 
@@ -214,12 +211,7 @@ int main(void)
 	OCR0A = F_CPU/(64 * TicksPerSecond) - 1;				// set the period to the bit time
 #endif
 	TCNT0 = 0;
-
-#if defined(__AVR_ATtiny44A__)
 	TIMSK0 |= BITVAL(OCIE0A);								// enable timer compare match interrupt
-#else
-	TIMSK |= BITVAL(OCIE0A);								// enable timer compare match interrupt
-#endif
 
 #ifndef __ECV__												// eCv++ doesn't understand gcc assembler syntax
 	wdt_enable(WDTO_500MS);									// enable the watchdog
@@ -237,27 +229,39 @@ int main(void)
 		}
 		else if (AS5601_GetTWIStateInfo() != 0)
 		{
-			ReportError(FLASHES_ERR_STATE);
+			ReportError(FLASHES_ERR_I2C_STATE);
 		}
 		else
 		{
 			// Need at least a 1ms delay after writing the configuration register according to the datasheet. In fact, 1ms doesn't seem to be long enough, so we allow 20ms.
 			DelayTicks(TicksPerSecond/50);
-			if (AS5601_DetectMagnet())
+			const uint8_t status = AS5601_GetStatus();
+			if (status == StatusMD)
 			{
 				break;
 			}
-			ReportError(FLASHES_ERR_NOMAG);
+			ReportError(StatusToErrorCode(status));
 		}
 	}
 
 	blink(FLASHES_OK, LedGreen, OkBlinkTicks, OkBlinkTicks);	// blink 3 times after successful initialisation
 
-	AS5601_SetABN(0x8);											// set to 2048 resolution
+	AS5601_SetABN(ABN_2048_15K6HZ);								// set to 2048 resolution
 	AS5601_SetCurrentZeroPosition();							// set the current angle to zero
 	PORT_OUT &= ~BITVAL(PortOutBitNum);							// ensure output is in default low state
 
+	// Main send loop. The algorithm is:
+	// - Don't send anything unless the minimum interval has elapsed since we last sent something
+	// - If the status is good, and the position has changed, send the position (i.e. angle and switch)
+	// - If the status has changed from bad to good, send the position. RRF will clear its error status when it received a position message.
+	// - If the status has changed from good to bad, set the info state to 0 so that we send the status
+	// - Else if the info state isn't 0, send the next info word and advance the info state
+	// - Else do nothing unless the maximum interval has elapsed
+	// - Else if we sent an info word last time and the status is good, send the angle and switch
+	// - Else send the status
 	bool sentPosition = false;
+	uint8_t infoSendState = 0;
+	bool lastStatusGood = false;
 	for (;;)
 	{
 		CheckWatchdog();
@@ -266,25 +270,91 @@ int main(void)
 		const uint16_t diff = now - lastOutTicks;
 		if (diff >= MinOutputIntervalTicks)
 		{
-			uint16_t currentAngle = AS5601_GetAngle() >> BitsToDiscard;
-			if ((PIN_SWITCH & BITVAL(PinSwitchBitNum)) != 0)
+			bool sendAngle = false;
+			bool sendInfo = false;
+
+			const uint8_t status = AS5601_GetStatus();
+			const uint8_t statusGood = (status == StatusMD);
+			if (statusGood)
 			{
-				currentAngle |= SwitchOpenBit;						// send the switch bit too
+				uint16_t currentAngle = AS5601_GetAngle() >> BitsToDiscard;
+				if ((PIN_SWITCH & BITVAL(PinSwitchBitNum)) != 0)
+				{
+					currentAngle |= SwitchOpenBit;				// send the switch bit too
+				}
+				if (currentAngle != lastAngle || !lastStatusGood)
+				{
+					lastAngle = currentAngle;
+					sendAngle = true;
+				}
+			}
+			else if (lastStatusGood)							// if status has gone from OK to not OK
+			{
+				infoSendState = 0;
+				sendInfo = true;
 			}
 
-			// Produce the output signal related to the angle if it is due
-			if (currentAngle != lastAngle || (!sentPosition && diff >= MaxOutputIntervalTicks))
+			lastStatusGood = statusGood;
+
+			if (!sendAngle && !sendInfo)
+			{
+				if (infoSendState != 0)
+				{
+					sendInfo = true;
+				}
+				else if (diff >= MaxOutputIntervalTicks)
+				{
+					if (!sentPosition && statusGood)
+					{
+						sendAngle = true;
+					}
+					else
+					{
+						sendInfo = true;
+					}
+				}
+			}
+
+			if (sendAngle)
 			{
 				lastOutTicks = now;
-				lastAngle = currentAngle;
-				SendWord(PositionBits | currentAngle, LedGreen);
+				SendWord(PositionBits | lastAngle, LedGreen);
 				sentPosition = true;
 			}
-			else if (diff >= MaxOutputIntervalTicks)
+			else if (sendInfo)
 			{
+				switch (infoSendState)
+				{
+				case 0:
+					{
+						uint8_t errorCode = StatusToErrorCode(status);
+						if (errorCode != FLASHES_OK)
+						{
+							SendWord(ErrorBits | errorCode, LedRed);
+							break;
+						}
+					}
+					++infoSendState;
+					// no break
+				case 1:
+					SendWord(VersionBits | FirmwareVersion, LedRed);
+					break;
+
+				case 2:
+					SendWord(AgcBits | AS5601_GetAGC(), LedRed);
+					break;
+
+				case 3:
+					SendWord(MagnitudeBits | ((AS5601_GetMagnitude() >> 4) & 0x00FF), LedRed);
+					break;
+				}
 				lastOutTicks = now;
-				SendWord(VersionBits | FirmwareVersion, LedRed);
 				sentPosition = false;
+				++infoSendState;
+				if (infoSendState == 4)
+				{
+					infoSendState = 0;
+				}
 			}
 		}
 	}
@@ -297,10 +367,8 @@ int main(void)
 // Timer ISR for setting output flag
 #ifdef __ECV__
 void tickIsr()
-#elif defined(__AVR_ATtiny44A__)
-ISR(TIM0_COMPA_vect)
 #else
-ISR(TIMER0_COMPA_vect)
+ISR(TIM0_COMPA_vect)
 #endif
 {
 	tickCounter++;
@@ -327,10 +395,6 @@ inline void SendOneBit()
 // Send a 16-bit word
 void SendWord(uint16_t data, uint8_t ledMask)
 {
-#if defined(__AVR_ATtiny45__)
-	ledMask &= LedGreen;							// the red LED shares the main output pin, so we can't control it independently
-#endif
-
 	PORT_LED |= ledMask;							// turn on the LED because it is separate from the output pin
 
 	// Calculate the parity bit

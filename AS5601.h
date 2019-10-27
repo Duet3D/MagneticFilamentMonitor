@@ -10,99 +10,119 @@
 #ifndef AS5601
 #define AS5601
 
-//address
-#define		AS5601_ADDRESS	0x36u
+// I2C address
+constexpr uint8_t AS5601_ADDRESS = 0x36u;
 
-//Configuration Registers:
+// Configuration Registers:
 //		To change a configuration, read out the register, modify only the desired bits and write the new configuration. Blank fields may contain factory settings.
 //		During power-up, configuration registers are reset to the permanently programmed value. Not programmed bits are zero.
-#define		ZMCO			0x00	//R
-#define		ZPOSA			0x01	//R/W/P
-#define		ZPOSB			0x02	//R/W/P
-#define		CONFA			0x07	//R/W/P
-#define		CONFB			0x08	//R/W/P
-#define		ABN				0x09	//R/W/P
-#define		PUSHTHR			0x0A	//R/W/P
+constexpr uint8_t RegZMCO = 0x00;		//R
+constexpr uint8_t RegZPOSA = 0x01;		//R/W/P
+constexpr uint8_t RegZPOSB = 0x02;		//R/W/P
+constexpr uint8_t RegCONFA = 0x07;		//R/W/P
+constexpr uint8_t RegCONFB = 0x08;		//R/W/P
+constexpr uint8_t RegABN = 0x09;		//R/W/P
+constexpr uint8_t RegPUSHTHR = 0x0A;	//R/W/P
 
-//Output Registers
-#define		RAWANGLEA		0x0C	//R
-#define		RAWANGLEB		0x0D	//R
-#define		ANGLEA			0x0E	//R
-#define		ANGLEB			0x0F	//R
+// Output Registers
+constexpr uint8_t RegRAWANGLEA = 0x0C;	//R
+constexpr uint8_t RegRAWANGLEB = 0x0D;	//R
+constexpr uint8_t RegANGLEA = 0x0E;		//R
+constexpr uint8_t RegANGLEB = 0x0F;		//R
 
-//Status Registers
-#define		STATUS			0x0B	//R
-#define		AGC				0x1A	//R
-#define		MAGNITUDEA		0x1B	//R
-#define		MAGNITUDEB		0x1C	//R
+// Status Registers
+constexpr uint8_t RegSTATUS = 0x0B;		//R
+constexpr uint8_t RegAGC = 0x1A;		//R
+constexpr uint8_t RegMAGNITUDEA = 0x1B;	//R
+constexpr uint8_t RegMAGNITUDEB = 0x1C;	//R
 
-
+#if 0
 //Burn Command
 #define		BURN			0xFF	//W 
 
 //Burn command options
 #define		BURN_ANGLE		0x80
 #define		BURN_SETTING	0x40
+#endif
 
-//configuration options
-//	power mode
-#define		PM_NOM			0x00
-#define		PM_LPM1			0x01
-#define		PM_LPM2			0x02
-#define		PM_LPM3			0x03
-//	Hysteresis
-#define		HYST_OFF		0x00
-#define		HYST_LSB1		0x01
-#define		HYST_LSB2		0x02
-#define		HYST_LSB3		0x03
-//slow filter
-#define		SF_16X			0x00
-#define		SF_8X			0x01
-#define		SF_4X			0x02
-#define		SF_2X			0x03
-//fast filter threshold
-#define		FTH_SFO			0x00
-#define		FTH_1			0x01
-#define		FTH_2			0x02
-#define		FTH_3			0x03
-#define		FTH_4			0x04
-#define		FTH_5			0x05
-#define		FTH_6			0x06
-#define		FTH_7			0x07
-//Watchdog Timer
-#define		WD_OFF			0x00
-#define		WD_ON			0x01
-
-
-//ABN Mapping
-#define		ABN_8_61HZ		0x00
-#define		ABN_16_122HZ	0x01
-#define		ABN_32_244HZ	0x02
-#define		ABN_64_488HZ	0x03
-#define		ABN_128_976HZ	0x04
-#define		ABN_256_1K9HZ	0x05
-#define		ABN_512_3K9HZ	0x06
-#define		ABN_1024_7K8HZ	0x07
-#define		ABN_2048_15K6HZ	0x08
-
-//STATUS options:
-#define		STATUS_MD		0b00100000
-#define		STATUS_ML		0b00010000
-#define		STATUS_MH		0b00001000
-
-
-bool		AS5601_Initialise(uint16_t config);						//Connect over I2C and configure the AS5601, calls the SetConfig with default values
-bool		AS5601_SetRegister(uint8_t registerAddress);	//set the register for a read (only required when getting the angle so this can bet set one cand then read multiple times, other get commands set the correct register as part of the command)
-/*
-The CONF register supports customizing the AS5601 the following information is returned:
-Bit position	Description
+/* Configuration register bits, We treat the two configuration registers as a single 16-bit register at address 0x07.
+ Bit position	Description
 	1:0			Power Mode	00 = NOM, 01 = LPM1, 10 = LPM2, 11 = LPM3
 	3:2			Hysteresis	00 = OFF, 01 = 1 LSB, 10 = 2 LSBs, 11 = 3 LSBs
 	9:8			Slow Filter	00 = 16x (1); 01 = 8x; 10 = 4x; 11 = 2x
 	12:10		Fast Filter Threshold 000 = slow filter only, 001 = 6 LSBs, 010 = 7 LSBs, 011 = 9 LSBs,100 = 18 LSBs, 101 = 21 LSBs, 110 = 24 LSBs, 111 = 10 LSBs
 	13			Watchdog Timer 0 = OFF, 1 = ON (automatic entry into LPM3 low-power mode enabled)
 */
-uint16_t	AS5601_GetConfig(void);
+
+// Power mode
+constexpr uint16_t ConfPM_Shift = 0;
+constexpr uint16_t ConfPM_Mask = 0x03 << ConfPM_Shift;
+
+constexpr uint16_t ConfPM_NOM = 0x00 << ConfPM_Shift;
+constexpr uint16_t ConfPM_LPM1 = 0x01 << ConfPM_Shift;
+constexpr uint16_t ConfPM_LPM2 = 0x02 << ConfPM_Shift;
+constexpr uint16_t ConfPM_LPM3 = 0x03 << ConfPM_Shift;
+
+//	Hysteresis
+constexpr uint16_t ConfHYST_Shift = 2;
+constexpr uint16_t ConfHYST_Mask = 0x03 << ConfHYST_Shift;
+
+constexpr uint16_t ConfHYST_OF = 0x00 << ConfHYST_Shift;
+constexpr uint16_t ConfHYST_LSB1 = 0x01 << ConfHYST_Shift;
+constexpr uint16_t ConfHYST_LSB2 = 0x02 << ConfHYST_Shift;
+constexpr uint16_t ConfHYST_LSB3 = 0x03 << ConfHYST_Shift;
+
+// Slow filter
+constexpr uint16_t ConfSF_Shift = 8;
+constexpr uint16_t ConfSF_Mask = 0x03 << ConfSF_Shift;
+
+constexpr uint16_t ConfSF_16X = 0x00 << ConfSF_Shift;
+constexpr uint16_t ConfSF_8X = 0x01 << ConfSF_Shift;
+constexpr uint16_t ConfSF_4X = 0x02 << ConfSF_Shift;
+constexpr uint16_t ConfSF_2X = 0x03 << ConfSF_Shift;
+
+// Fast filter threshold
+constexpr uint16_t ConfFTH_Shift = 10;
+constexpr uint16_t ConfFTH_Mask = 0x07 << ConfFTH_Shift;
+
+constexpr uint16_t ConfFTH_SF = 0x00 << ConfFTH_Shift;
+constexpr uint16_t ConfFTH_6LSB = 0x01 << ConfFTH_Shift;
+constexpr uint16_t ConfFTH_7LSB = 0x02 << ConfFTH_Shift;
+constexpr uint16_t ConfFTH_9LSB = 0x03 << ConfFTH_Shift;
+constexpr uint16_t ConfFTH_18LSB = 0x04 << ConfFTH_Shift;
+constexpr uint16_t ConfFTH_21LSB = 0x05 << ConfFTH_Shift;
+constexpr uint16_t ConfFTH_24LSB = 0x06 << ConfFTH_Shift;
+constexpr uint16_t ConfFTH_10LSB = 0x07 << ConfFTH_Shift;
+
+// Watchdog Timer
+constexpr uint16_t ConfWD_Shift = 13;
+constexpr uint16_t ConfWD_Mask = 0x01 << ConfWD_Shift;
+
+constexpr uint16_t ConfWD_OFF = 0x00 << ConfWD_Shift;
+constexpr uint16_t ConfWD_ON = 0x01 << ConfWD_Shift;
+
+// ABN Mapping
+constexpr uint8_t ABN_Mask = 0x0F;
+
+constexpr uint8_t ABN_8_61HZ = 0x00;
+constexpr uint8_t ABN_16_122HZ = 0x01;
+constexpr uint8_t ABN_32_244HZ = 0x02;
+constexpr uint8_t ABN_64_488HZ = 0x03;
+constexpr uint8_t ABN_128_976HZ = 0x04;
+constexpr uint8_t ABN_256_1K9HZ = 0x05;
+constexpr uint8_t ABN_512_3K9H = 0x06;
+constexpr uint8_t ABN_1024_7K8HZ = 0x07;
+constexpr uint8_t ABN_2048_15K6HZ = 0x08;
+
+// STATUS bits
+constexpr uint8_t StatusMD = 0b00100000;
+constexpr uint8_t StatusML = 0b00010000;
+constexpr uint8_t StatusMH = 0b00001000;
+
+
+bool AS5601_Initialise(uint16_t config);			// Connect over I2C and configure the AS5601, calls the SetConfig with default values
+bool AS5601_SetRegister(uint8_t registerAddress);	// Set the register for a read (only required when getting the angle so this can bet set one can then read multiple times, other get commands set the correct register as part of the command)
+uint16_t AS5601_GetConfig();
 
 /*
 POWER MODE
@@ -175,27 +195,22 @@ MH AGC minimum gain overflow, magnet too strong
 ML AGC maximum gain overflow, magnet too weak
 MD Magnet was detected
 */
-uint8_t		AS5601_GetStatus(void);
+uint8_t		AS5601_GetStatus();
 
-
-bool		AS5601_DetectMagnet(void);		//Check if the magnet is detected (shortcut for GetStatus returning MD high)
-
-
-uint16_t	AS5601_GetMagnitude(void);		//The MAGNITUDE register indicates the magnitude value of the internal CORDIC output.
+uint16_t	AS5601_GetMagnitude();		//The MAGNITUDE register indicates the magnitude value of the internal CORDIC output.
 
 /*
 For the most robust performance, the gain value should be in the center of its range.
 In 5V operation, the AGC range is 0-255 counts. The AGC range is reduced to 0-128 counts in 3.3V mode.
 */
-uint8_t		AS5601_GetAGC(void);			
-
+uint8_t		AS5601_GetAGC();			
 
 /*
 The RAW ANGLE register contains the unmodified angle.
 The zero adjusted and filtered output value is available in the ANGLE register.
 */
-uint16_t	AS5601_GetRawAngle(void);
-uint16_t	AS5601_GetAngle(void);
+uint16_t	AS5601_GetRawAngle();
+uint16_t	AS5601_GetAngle();
 
 /*
 It sets the current RAWANGLE to be "0"

@@ -115,7 +115,7 @@ Connect over I2C and configure the AS5601,sets the config values to the defaults
 bool AS5601_Initialise(uint16_t config)
 {
 	USI_TWI_Master_Initialise();
-	return AS5601_Write16(CONFA, config);
+	return AS5601_Write16(RegCONFA, config);
 }
 
 /*
@@ -129,7 +129,7 @@ Bit position	Description
 */
 uint16_t AS5601_GetConfig(void)
 {
-	return AS5601_Read16(CONFA);
+	return AS5601_Read16(RegCONFA);
 }
 
 /*
@@ -148,8 +148,8 @@ Default 00 = NOM
 */
 bool AS5601_SetPowerMode(uint8_t pm)
 {
-	const uint8_t confb_current = (AS5601_Read8(CONFB) & 0x0Fu);
-	return AS5601_Write8(CONFB,((confb_current & 0x0Cu) | pm));
+	const uint8_t confb_current = (AS5601_Read8(RegCONFB) & 0x0Fu);
+	return AS5601_Write8(RegCONFB,((confb_current & 0x0Cu) | pm));
 }
 
 /*
@@ -161,8 +161,8 @@ Default 00 = OFF
 */
 bool AS5601_SetHysteresis(uint8_t hyst)
 {
-	const uint8_t confb_current = (AS5601_Read8(CONFB) & 0x0Fu);
-	return AS5601_Write8(CONFB,((confb_current & 0x03u) | hyst << 2u));
+	const uint8_t confb_current = (AS5601_Read8(RegCONFB) & 0x0Fu);
+	return AS5601_Write8(RegCONFB,((confb_current & 0x03u) | hyst << 2u));
 }
 
 /*
@@ -181,8 +181,8 @@ Default 2X,11
 */
 bool AS5601_SetSlowFilter(uint8_t sf)
 {
-	const uint8_t confa_current = (AS5601_Read8(CONFA) & 0x3Fu);
-	return AS5601_Write8(CONFA, ((confa_current & 0x3Cu) | sf));
+	const uint8_t confa_current = (AS5601_Read8(RegCONFA) & 0x3Fu);
+	return AS5601_Write8(RegCONFA, ((confa_current & 0x3Cu) | sf));
 }
 
 /*
@@ -208,8 +208,8 @@ Default FTH_4
 */
 bool AS5601_SetFastFilter(uint8_t fth)
 {
-	const uint8_t confa_current = (AS5601_Read8(CONFA) & 0x3Fu);
-	return AS5601_Write8(CONFA,((confa_current & 0x23u) | fth << 2u));
+	const uint8_t confa_current = (AS5601_Read8(RegCONFA) & 0x3Fu);
+	return AS5601_Write8(RegCONFA,((confa_current & 0x23u) | fth << 2u));
 }
 
 /*
@@ -221,8 +221,8 @@ Default OFF
 */
 bool AS5601_SetWatchdog(uint8_t wd)
 {
-	const uint8_t confa_current = (AS5601_Read8(CONFA) & 0x3Fu);
-	return AS5601_Write8(CONFA,((confa_current & 0x1Fu) | wd << 5u));
+	const uint8_t confa_current = (AS5601_Read8(RegCONFA) & 0x3Fu);
+	return AS5601_Write8(RegCONFA,((confa_current & 0x1Fu) | wd << 5u));
 }
 
 /*
@@ -232,19 +232,13 @@ MD Magnet was detected
 */
 uint8_t AS5601_GetStatus(void)
 {
-	return AS5601_Read8(STATUS) & (STATUS_MD | STATUS_MH | STATUS_ML);
+	return AS5601_Read8(RegSTATUS) & (StatusMD | StatusMH | StatusML);
 }
 
-//positive if Magnet was detected
-bool AS5601_DetectMagnet(void)
-{
-	return AS5601_GetStatus() == STATUS_MD;
-}
-
-//The MAGNITUDE register indicates the magnitude value of the internal CORDIC output.
+// The MAGNITUDE register indicates the magnitude value of the internal CORDIC output.
 uint16_t AS5601_GetMagnitude(void)
 {
-	return AS5601_Read16(MAGNITUDEA) & 0x0FFFu;
+	return AS5601_Read16(RegMAGNITUDEA) & 0x0FFFu;
 }	
 
 /*
@@ -253,16 +247,17 @@ In 5V operation, the AGC range is 0-255 counts. The AGC range is reduced to 0-12
 */
 uint8_t AS5601_GetAGC(void)
 {
-	return AS5601_Read8(AGC);
+	return AS5601_Read8(RegAGC);
 }			
 
 /*
 The RAW ANGLE register contains the unmodified angle.
 The zero adjusted and filtered output value is available in the ANGLE register.
+Note(s): The ANGLE register has a 10-LSB hysteresis at the limit of the 360 degree range to avoid discontinuity points or toggling of the output within one rotation.
 */
 uint16_t AS5601_GetRawAngle(void)
 {
-	return AS5601_ReadFast16(RAWANGLEA) & 0x0FFFu;
+	return AS5601_ReadFast16(RegRAWANGLEA) & 0x0FFFu;
 }
 
 /*
@@ -270,7 +265,7 @@ The zero adjusted and filtered output value is available in the ANGLE register.
 */
 uint16_t AS5601_GetAngle(void)
 {
-	return AS5601_Read16(ANGLEA) & 0x0FFFu;
+	return AS5601_Read16(RegANGLEA) & 0x0FFFu;
 }
 
 /*
@@ -278,10 +273,10 @@ It sets the current ANGLE to be "0"
 */
 void AS5601_SetCurrentZeroPosition()
 {
-	AS5601_SetRegister(RAWANGLEA);
+	AS5601_SetRegister(RegRAWANGLEA);
 	uint16_t rawAngle = AS5601_GetRawAngle();
-	AS5601_SetRegister(ZPOSA);
-	AS5601_Write16(ZPOSA, rawAngle);
+	AS5601_SetRegister(RegZPOSA);
+	AS5601_Write16(RegZPOSA, rawAngle);
 }
 
 /*
@@ -300,7 +295,7 @@ others : 2048 (15.6 kHz))
 */
 void AS5601_SetABN(uint8_t abn_value)
 {
-	AS5601_Write8(ABN,abn_value);
+	AS5601_Write8(RegABN,abn_value);
 }
 
 /*
