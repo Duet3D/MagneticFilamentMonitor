@@ -34,7 +34,7 @@ extern void sei();
 
 #include "AS5601.h"
 
-constexpr uint8_t FirmwareVersion = 3;
+constexpr uint8_t FirmwareVersion = 4;
 
 #define DOUBLE_SPEED	(0)									// set nonzero for 2000bps, zero for 1000bps
 
@@ -219,10 +219,14 @@ int main(void)
 
 	sei();
 
+	// Initialisation
 	for (;;)
 	{
 		PORT_OUT &= ~BITVAL(PortOutBitNum);					// ensure output is in default low state
 		DelayTicks(2 * TicksPerSecond);						// allow the power voltage to stabilise, or give a break from flashing the previous error
+		SendWord(VersionBits | FirmwareVersion, 0);			// send our version, otherwise the error report will be ignored by RRF
+		DelayTicks(10);										// delay before sending any error word
+
 		if (!AS5601_Initialise(AS5601Config))
 		{
 			ReportError(FLASHES_ERR_I2C);
@@ -240,7 +244,7 @@ int main(void)
 			{
 				break;
 			}
-			ReportError(StatusToErrorCode(status));
+			ReportError(StatusToErrorCode(status));				// this blinks the LED and transmits the error
 		}
 	}
 

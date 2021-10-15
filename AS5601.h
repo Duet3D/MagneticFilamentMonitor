@@ -115,9 +115,9 @@ constexpr uint8_t ABN_1024_7K8HZ = 0x07;
 constexpr uint8_t ABN_2048_15K6HZ = 0x08;
 
 // STATUS bits
-constexpr uint8_t StatusMD = 0b00100000;
-constexpr uint8_t StatusML = 0b00010000;
-constexpr uint8_t StatusMH = 0b00001000;
+constexpr uint8_t StatusMD = 0b00100000;			// Magnet detected
+constexpr uint8_t StatusML = 0b00010000;			// Magnet too weak (AGC maximum gain overflow)
+constexpr uint8_t StatusMH = 0b00001000;			// Magnet too strong (AGC minimum gain overflow)
 
 
 bool AS5601_Initialise(uint16_t config);			// Connect over I2C and configure the AS5601, calls the SetConfig with default values
